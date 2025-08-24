@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AlidoozhEngine Pro — BTC</title>
+  <style>
+    body{font-family:tahoma,Arial,Segoe UI,sans-serif;background:#0f1115;color:#e6e6e6;margin:0;padding:24px;}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{background:#151a22;border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    h1{margin-top:0}
+    .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+    table{width:100%;border-collapse:collapse}
+    td,th{padding:8px;border-bottom:1px solid #2a2f3a}
+    .tag{display:inline-block;background:#1f2533;border:1px solid #2a3445;border-radius:999px;padding:2px 10px;margin:2px;font-size:12px}
+    .btn{display:inline-block;padding:8px 12px;border-radius:10px;background:#243044;border:1px solid #2e3b52;color:#e6e6e6;text-decoration:none}
+  </style>
+</head>
+<body>
+  <h1>AlidoozhEngine Pro — BTC</h1>
+  <div class="grid">
+    <div class="card">
+      <h3>قیمت لحظه‌ای</h3>
+      <div id="price" class="mono">-</div>
+      <div id="updated" style="color:#9aa4b2"></div>
+    </div>
+    <div class="card">
+      <h3>آخرین سیگنال</h3>
+      <div id="signal" class="mono">-</div>
+      <a class="btn" href="/api/signal" target="_blank">JSON</a>
+    </div>
+  </div>
+  <div class="card">
+    <h3>وزن الگوریتم‌ها</h3>
+    <div id="weights" class="mono"></div>
+  </div>
+  <div class="card">
+    <h3>آخرین معاملات</h3>
+    <table id="trades"><thead><tr><th>زمان</th><th>نوع</th><th>Entry</th><th>SL</th><th>TP</th><th>R/R</th><th>Conf</th><th>وضعیت</th><th>PnL%</th></tr></thead><tbody></tbody></table>
+  </div>
+<script>
+async function j(url){const r=await fetch(url);return r.json();}
+async function refresh(){
+  const s = await j('/api/signal');
+  const w = await j('/api/weights');
+  const t = await j('/api/trades?limit=30');
+  document.getElementById('price').textContent = s.price?('$'+(+s.price).toFixed(2)):'-';
+  document.getElementById('updated').textContent = s.updated_at || '';
+  document.getElementById('signal').textContent = s.decision? `${s.decision} | entry $${(+s.entry).toFixed(2)} | sl $${(+s.sl).toFixed(2)} | tp $${(+s.tp).toFixed(2)} | RR ${(+s.rr).toFixed(2)} | conf ${(s.confidence*100).toFixed(0)}%` : '-';
+  document.getElementById('weights').innerHTML = Object.entries(w.weights||{}).map(([k,v])=>`<span class="tag">${k}: ${(+v).toFixed(2)}</span>`).join('');
+  const tbody = document.querySelector('#trades tbody'); tbody.innerHTML='';
+  (t.trades||[]).forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.time||''}</td><td>${r.side||''}</td><td>${(+r.entry||0).toFixed(2)}</td><td>${(+r.sl||0).toFixed(2)}</td><td>${(+r.tp||0).toFixed(2)}</td><td>${(+r.rr||0).toFixed(2)}</td><td>${(+r.confidence||0).toFixed(2)}</td><td>${r.status||''}</td><td>${r.pnl_pct?(+r.pnl_pct).toFixed(2):''}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+refresh(); setInterval(refresh,2000);
+</script>
+</body>
+</html>

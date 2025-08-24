@@ -1,0 +1,12 @@
+{
+  "mlp": 0.22,
+  "drl": 0.22,
+  "rsi": 0.1,
+  "macd": 0.1,
+  "volume": 0.06,
+  "whale_activity": 0.1,
+  "market_state": 0.15,
+  "sentiment": 0.03,
+  "regime": 0.02,
+  "atr": 0.1
+}
