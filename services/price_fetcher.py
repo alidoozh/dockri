@@ -1,14 +1,16 @@
+import os
 import time
 import requests
 import pandas as pd
 from datetime import datetime, timezone
 
-# --- تنظیم ثابت ---
-POLL_INTERVAL = 10  # هر 10 ثانیه یکبار
+POLL_INTERVAL = float(os.getenv("POLL_INTERVAL", "10"))
 
 COINCAP_PRICE = "https://api.coincap.io/v2/assets/bitcoin"
 COINCAP_HISTORY = "https://api.coincap.io/v2/candles"
 
+# لیست fallback exchanges
+EXCHANGES = ["binance-us", "coinbase", "kraken"]
 
 def get_spot_price():
     """دریافت قیمت لحظه‌ای BTC از CoinCap"""
@@ -22,39 +24,42 @@ def get_spot_price():
 
 
 def get_recent_minutes(limit=240):
-    """دریافت OHLCV دقیقه‌ای BTC از CoinCap"""
-    try:
-        r = requests.get(COINCAP_HISTORY, params={
-            "exchange": "binance",     # منبع داده
-            "interval": "m1",          # کندل 1 دقیقه‌ای
-            "baseId": "bitcoin",
-            "quoteId": "tether",
-            "limit": limit
-        }, timeout=10)
-        r.raise_for_status()
-        js = r.json()
-        data = []
-        for k in js['data']:
-            t = int(k['period'])
-            o = float(k['open'])
-            h = float(k['high'])
-            l = float(k['low'])
-            c = float(k['close'])
-            v = float(k['volume'])
-            data.append({
-                "time": datetime.fromtimestamp(t / 1000, tz=timezone.utc),
-                "open": o,
-                "high": h,
-                "low": l,
-                "close": c,
-                "volume": v
-            })
-        return pd.DataFrame(data)
-    except Exception as e:
-        raise RuntimeError(f"Failed to fetch OHLCV from CoinCap: {e}")
+    """دریافت OHLCV دقیقه‌ای BTC از CoinCap با fallback بین چند اکسچنج"""
+    last_err = None
+    for ex in EXCHANGES:
+        try:
+            r = requests.get(COINCAP_HISTORY, params={
+                "exchange": ex,
+                "interval": "m1",
+                "baseId": "bitcoin",
+                "quoteId": "tether",
+                "limit": limit
+            }, timeout=10)
+            r.raise_for_status()
+            js = r.json()
+            data = []
+            for k in js['data']:
+                t = int(k['period'])
+                o = float(k['open'])
+                h = float(k['high'])
+                l = float(k['low'])
+                c = float(k['close'])
+                v = float(k['volume'])
+                data.append({
+                    "time": datetime.fromtimestamp(t/1000, tz=timezone.utc),
+                    "open": o,
+                    "high": h,
+                    "low": l,
+                    "close": c,
+                    "volume": v
+                })
+            return pd.DataFrame(data)
+        except Exception as e:
+            last_err = e
+            continue
+    raise RuntimeError(f"Failed to fetch OHLCV from CoinCap exchanges: {last_err}")
 
 
-# --- حالت تست مستقل ---
 if __name__ == "__main__":
     while True:
         try:
