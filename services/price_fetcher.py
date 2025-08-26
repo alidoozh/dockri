@@ -1,50 +1,67 @@
+import time
 import requests
 import pandas as pd
 from datetime import datetime, timezone
 
-BINANCE_DOMAINS = [
-    "https://api.binance.com",
-    "https://api1.binance.com",
-    "https://api3.binance.com"
-]
+# --- تنظیم ثابت ---
+POLL_INTERVAL = 10  # هر 10 ثانیه یکبار
+
+COINCAP_PRICE = "https://api.coincap.io/v2/assets/bitcoin"
+COINCAP_HISTORY = "https://api.coincap.io/v2/candles"
+
 
 def get_spot_price():
-    last_error = None
-    for base in BINANCE_DOMAINS:
-        try:
-            url = f"{base}/api/v3/ticker/price?symbol=BTCUSDT"
-            r = requests.get(url, timeout=10)
-            r.raise_for_status()
-            return float(r.json()['price'])
-        except Exception as e:
-            last_error = e
-            continue
-    raise RuntimeError(f"Failed to fetch spot price from all Binance domains: {last_error}")
+    """دریافت قیمت لحظه‌ای BTC از CoinCap"""
+    try:
+        r = requests.get(COINCAP_PRICE, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        return float(data['data']['priceUsd'])
+    except Exception as e:
+        raise RuntimeError(f"Failed to fetch spot price from CoinCap: {e}")
+
 
 def get_recent_minutes(limit=240):
-    last_error = None
-    for base in BINANCE_DOMAINS:
+    """دریافت OHLCV دقیقه‌ای BTC از CoinCap"""
+    try:
+        r = requests.get(COINCAP_HISTORY, params={
+            "exchange": "binance",     # منبع داده
+            "interval": "m1",          # کندل 1 دقیقه‌ای
+            "baseId": "bitcoin",
+            "quoteId": "tether",
+            "limit": limit
+        }, timeout=10)
+        r.raise_for_status()
+        js = r.json()
+        data = []
+        for k in js['data']:
+            t = int(k['period'])
+            o = float(k['open'])
+            h = float(k['high'])
+            l = float(k['low'])
+            c = float(k['close'])
+            v = float(k['volume'])
+            data.append({
+                "time": datetime.fromtimestamp(t / 1000, tz=timezone.utc),
+                "open": o,
+                "high": h,
+                "low": l,
+                "close": c,
+                "volume": v
+            })
+        return pd.DataFrame(data)
+    except Exception as e:
+        raise RuntimeError(f"Failed to fetch OHLCV from CoinCap: {e}")
+
+
+# --- حالت تست مستقل ---
+if __name__ == "__main__":
+    while True:
         try:
-            url = f"{base}/api/v3/klines"
-            params = {"symbol":"BTCUSDT","interval":"1m","limit":limit}
-            r = requests.get(url, params=params, timeout=10)
-            r.raise_for_status()
-            data = []
-            for k in r.json():
-                t = k[0]
-                h = float(k[2])
-                l = float(k[3])
-                c = float(k[4])
-                v = float(k[5])
-                data.append({
-                    "time": datetime.fromtimestamp(t/1000, tz=timezone.utc),
-                    "price": c,
-                    "high": h,
-                    "low": l,
-                    "volume": v
-                })
-            return pd.DataFrame(data)
+            price = get_spot_price()
+            print(f"[BTC/USDT] Spot Price: {price:.2f}")
+            df = get_recent_minutes(limit=5)
+            print(df.tail(1))
         except Exception as e:
-            last_error = e
-            continue
-    raise RuntimeError(f"Failed to fetch OHLCV from all Binance domains: {last_error}")
+            print("[ERROR]", e)
+        time.sleep(POLL_INTERVAL)
